@@ -234,14 +234,6 @@
       ]
     },
     {
-      "groupName": "Github Actions",
-      "automerge": false,
-      "matchPackageNames": [
-        "@actions/upload-artifact{/,}**",
-        "@actions/download-artifact{/,}**"
-      ]
-    },
-    {
       "allowedVersions": "<1.4.0",
       "matchPackageNames": [
         "k8s.io/client-go"
