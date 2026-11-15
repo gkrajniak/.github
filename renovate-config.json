@@ -231,10 +231,15 @@
     },
     {
       "description": "No release delay for our own reusable workflows and org Actions",
+      "groupName": "Platform Mesh GitHub Actions",
+      "groupSlug": "platform-mesh-github-actions",
       "matchManagers": [
         "github-actions"
       ],
       "minimumReleaseAge": "0 days",
+      "schedule": [
+        "at any time"
+      ],
       "matchPackageNames": [
         "/^platform-mesh//"
       ]
