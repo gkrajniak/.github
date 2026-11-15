@@ -8,20 +8,16 @@
     ":noUnscheduledUpdates"
   ],
   "configMigration": true,
-  "npm": {},
   "automerge": true,
-  "automergeType": "pr",
   "autoApprove": true,
   "timezone": "Europe/Berlin",
   "schedule": [
     "* * * * 0"
   ],
   "minimumReleaseAge": "7 days",
-  "internalChecksFilter": "strict",
-  "platformAutomerge": true,
+  "minimumReleaseAgeBehaviour": "timestamp-optional",
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
-    "enabled": true,
     "labels": [
       "security",
       "vulnerability"
@@ -32,8 +28,7 @@
     "reviewers": [
       "team:platform-mesh/security"
     ],
-    "automerge": true,
-    "platformAutomerge": true
+    "automerge": true
   },
   "postUpdateOptions": [
     "gomodUpdateImportPaths",
@@ -45,9 +40,6 @@
       "description": "Batch non-major updates into weekly PRs, one per ecosystem.",
       "groupName": "all non-major dependencies",
       "groupSlug": "all-minor-patch",
-      "matchPackageNames": [
-        "*"
-      ],
       "matchUpdateTypes": [
         "minor",
         "patch",
@@ -177,13 +169,11 @@
       "matchManagers": [
         "helmv3"
       ],
-      "enabled": true,
       "bumpVersion": "patch"
     },
     {
       "groupName": "NestJS",
       "automerge": false,
-      "platformAutomerge": false,
       "matchPackageNames": [
         "@nestjs/{/,}**",
         "axios{/,}**",
@@ -194,23 +184,18 @@
     {
       "groupName": "Luigi",
       "automerge": false,
-      "platformAutomerge": false,
       "matchPackageNames": [
         "@luigi-project/{/,}**"
       ]
     },
     {
       "groupName": "OpenMFP",
-      "automerge": true,
-      "platformAutomerge": true,
       "matchPackageNames": [
         "@openmfp/**"
       ]
     },
     {
       "groupName": "Platform Mesh",
-      "automerge": true,
-      "platformAutomerge": true,
       "matchPackageNames": [
         "@platform-mesh/**"
       ]
@@ -218,7 +203,6 @@
     {
       "groupName": "Fundamental NGX and Angular",
       "automerge": false,
-      "platformAutomerge": false,
       "matchPackageNames": [
         "@angular-eslint/{/,}**",
         "@angular/{/,}**",
@@ -274,7 +258,6 @@
       ]
     }
   ],
-  "rebaseWhen": "auto",
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
