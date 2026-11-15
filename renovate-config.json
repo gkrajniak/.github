@@ -16,6 +16,12 @@
   ],
   "minimumReleaseAge": "7 days",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
+  "logLevelRemap": [
+    {
+      "matchMessage": "/Some .+ did not have a releaseTimestamp, but as we're running with minimumReleaseAgeBehaviour=timestamp-optional, proceeding/",
+      "newLogLevel": "info"
+    }
+  ],
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
     "labels": [
