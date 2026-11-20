@@ -1,0 +1,75 @@
+rulesets:
+
+  - name: merge_queue
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        exclude: []
+        include:
+          - ~DEFAULT_BRANCH
+    rules:
+      - type: deletion
+      - type: merge_queue
+        parameters:
+          merge_method: MERGE
+          max_entries_to_build: 1
+          min_entries_to_merge: 10
+          max_entries_to_merge: 100
+          min_entries_to_merge_wait_minutes: 10
+          grouping_strategy: ALLGREEN
+          check_response_timeout_minutes: 60
+      - type: non_fast_forward
+      - type: required_status_checks
+        parameters:
+          strict_required_status_checks_policy: false
+          do_not_enforce_on_create: false
+          required_status_checks:
+            - context: pr-gate
+              integration_id: 15368
+    bypass_actors: []
+
+  - name: release_branch_gate
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        exclude: []
+        include:
+          - refs/heads/release-*
+    rules:
+      - type: required_status_checks
+        parameters:
+          strict_required_status_checks_policy: false
+          do_not_enforce_on_create: true
+          required_status_checks:
+            - context: pr-gate
+              integration_id: 15368
+    bypass_actors: []
+
+  - name: require_review
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        exclude: []
+        include:
+          - ~DEFAULT_BRANCH
+          - refs/heads/release-*
+    rules:
+      - type: pull_request
+        parameters:
+          required_approving_review_count: 1
+          dismiss_stale_reviews_on_push: true
+          required_reviewers: []
+          require_code_owner_review: true
+          dismissal_restriction:
+            enabled: false
+            allowed_actors: []
+          require_last_push_approval: true
+          required_review_thread_resolution: false
+          require_extra_approval_for_unattributed_changes: true
+          allowed_merge_methods:
+            - merge
+            - squash
+    bypass_actors: []

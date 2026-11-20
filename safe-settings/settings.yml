@@ -1,0 +1,414 @@
+repository:
+
+  # Clean up merged PR branches automatically.
+  delete_branch_on_merge: true
+
+  # Allow auto-merge to merge a PR as soon as CI is green.
+  allow_auto_merge: true
+
+  # Only allow merge and squash merges - rebase is not possible due to
+  # requiring signed commits.
+  allow_merge_commit: true
+  allow_squash_merge: true
+  allow_rebase_merge: false
+
+  # Disable wikis, documentation must be tracked either in-repo or in
+  # the website.
+  has_wiki: false
+
+  # PM only maintains project boards in the backlog repo.
+  has_projects: false
+
+  security_and_analysis:
+    secret_scanning:
+      status: enabled
+    secret_scanning_push_protection:
+      status: enabled
+
+# Each team gets write to each repository - rulesets are restricting access.
+teams:
+  - name: contributors
+    permission: push
+  - name: go-maintainers
+    permission: push
+  - name: node-maintainers
+    permission: push
+  - name: tsc
+    permission: push
+
+# org-wide
+rulesets:
+
+  - name: branches - deny all
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - ~ALL
+        exclude:
+          - ~DEFAULT_BRANCH
+          - refs/heads/gh-readonly-queue/**/*
+          - refs/heads/renovate/**/*
+          - refs/heads/bump/**/*
+          - refs/heads/release-*
+      repository_name:
+        include:
+          - ~ALL
+        exclude: []
+    rules:
+      - type: creation
+      - type: update
+      - type: deletion
+      - type: non_fast_forward
+    bypass_actors: []
+
+  - name: component release tags
+    target: tag
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - refs/tags/*/v*
+        exclude: []
+      repository_name:
+        include:
+          - ~ALL
+        exclude: []
+    rules:
+      - type: creation
+      - type: update
+      - type: deletion
+      - type: non_fast_forward
+    bypass_actors:
+      - actor_id: 19214021
+        actor_type: Team
+        bypass_mode: always
+
+  - name: default branch - base policy
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        exclude: []
+        include:
+          - ~DEFAULT_BRANCH
+      repository_name:
+        exclude: []
+        include:
+          - ~ALL
+    rules:
+      - type: deletion
+      - type: non_fast_forward
+      - type: pull_request
+        parameters:
+          required_approving_review_count: 1
+          dismiss_stale_reviews_on_push: true
+          required_reviewers: []
+          require_code_owner_review: true
+          require_last_push_approval: true
+          required_review_thread_resolution: true
+          require_extra_approval_for_unattributed_changes: false
+          allowed_merge_methods:
+            - merge
+            - squash
+            - rebase
+      - type: required_status_checks
+        parameters:
+          strict_required_status_checks_policy: false
+          do_not_enforce_on_create: true
+          required_status_checks:
+            - context: DCO
+    bypass_actors: []
+
+  - name: merge queue branches
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - refs/heads/gh-readonly-queue/**/*
+        exclude: []
+      repository_name:
+        include:
+          - ~ALL
+        exclude: []
+    rules:
+      - type: creation
+      - type: update
+      - type: deletion
+      - type: non_fast_forward
+    bypass_actors:
+      - actor_id: 262318
+        actor_type: Integration
+        bypass_mode: always
+  - name: publisher tags
+    target: tag
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - refs/tags/[0-9]*.[0-9]*.[0-9]*
+        exclude: []
+      repository_name:
+        include:
+          - ~ALL
+        exclude: []
+    rules:
+      - type: creation
+      - type: update
+      - type: deletion
+      - type: non_fast_forward
+    bypass_actors:
+      - actor_id: 1415820
+        actor_type: Integration
+        bypass_mode: always
+
+  - name: publisher branches
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - refs/heads/bump/**/*
+        exclude: []
+      repository_name:
+        include:
+          - ~ALL
+        exclude: []
+    rules:
+      - type: creation
+      - type: update
+      - type: deletion
+      - type: non_fast_forward
+    bypass_actors:
+      - actor_id: 1415820
+        actor_type: Integration
+        bypass_mode: always
+
+  - name: default branch - quality gate
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - ~DEFAULT_BRANCH
+        exclude: []
+      repository_property:
+        include:
+          - name: REPO_TYPE
+            source: custom
+            property_values:
+              - GO_APP
+              - GO_MODULE
+              - NODE_APP
+              - NODE_MODULE
+        exclude: []
+    rules:
+      - type: required_status_checks
+        parameters:
+          do_not_enforce_on_create: true
+          strict_required_status_checks_policy: false
+          required_status_checks:
+            - context: quality-gate
+    bypass_actors: []
+
+  - name: release branches - release-managers only
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - refs/heads/release-*
+        exclude: []
+      repository_name:
+        include:
+          - ~ALL
+        exclude: []
+    rules:
+      - type: creation
+      - type: deletion
+    bypass_actors:
+      - actor_id: 19214021
+        actor_type: Team
+        bypass_mode: always
+
+  - name: release branches
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - refs/heads/release-*
+        exclude: []
+      repository_name:
+        include:
+          - ~ALL
+        exclude: []
+    rules:
+      - type: non_fast_forward
+      - type: pull_request
+        parameters:
+          required_approving_review_count: 1
+          dismiss_stale_reviews_on_push: true
+          required_reviewers: []
+          require_code_owner_review: true
+          require_last_push_approval: true
+          required_review_thread_resolution: false
+          require_extra_approval_for_unattributed_changes: false
+          allowed_merge_methods:
+            - merge
+            - squash
+            - rebase
+    bypass_actors: []
+
+  - name: release tags
+    target: tag
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - refs/tags/v*
+        exclude: []
+      repository_name:
+        include:
+          - ~ALL
+        exclude: []
+    rules:
+      - type: creation
+      - type: update
+      - type: deletion
+      - type: non_fast_forward
+    bypass_actors:
+      - actor_id: 19214021
+        actor_type: Team
+        bypass_mode: always
+      - actor_id: 1415820
+        actor_type: Integration
+        bypass_mode: always
+
+  - name: renovate branches
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - refs/heads/renovate/**/*
+        exclude: []
+      repository_name:
+        include:
+          - ~ALL
+        exclude: []
+    rules:
+      - type: creation
+      - type: update
+      - type: deletion
+      - type: non_fast_forward
+    bypass_actors:
+      - actor_id: 2740
+        actor_type: Integration
+        bypass_mode: always
+
+  - name: all branches - signed commits
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - ~ALL
+        exclude:
+          - refs/heads/gh-readonly-queue/**/*
+      repository_name:
+        include:
+          - ~ALL
+        exclude: []
+    rules:
+      - type: required_signatures
+    bypass_actors:
+      - actor_id: 2740
+        actor_type: Integration
+        bypass_mode: always
+      - actor_id: 262318
+        actor_type: Integration
+        bypass_mode: always
+      - actor_id: 1415820
+        actor_type: Integration
+        bypass_mode: always
+
+  - name: tags - deny all
+    target: tag
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - ~ALL
+        exclude:
+          - refs/tags/v*
+          - refs/tags/*/v*
+          - refs/tags/[0-9]*.[0-9]*.[0-9]*
+      repository_name:
+        include:
+          - ~ALL
+        exclude: []
+    rules:
+      - type: creation
+      - type: update
+      - type: deletion
+      - type: non_fast_forward
+    bypass_actors: []
+
+  # new policies
+  - name: disable transfers
+    target: repository
+    enforcement: active
+    conditions:
+      repository_name:
+        exclude: []
+        include:
+          - ~ALL
+    rules:
+      - type: repository_transfer
+    bypass_actors: []
+
+  - name: disallow deletions
+    target: repository
+    enforcement: active
+    conditions:
+      repository_name:
+        exclude: []
+        include:
+          - ~ALL
+    rules:
+      - type: repository_delete
+    bypass_actors: []
+
+  - name: only admin may create repos
+    target: repository
+    enforcement: active
+    conditions:
+      repository_name:
+        exclude: []
+        include:
+          - ~ALL
+    rules:
+      - type: repository_create
+    bypass_actors:
+      - actor_id: null
+        actor_type: OrganizationAdmin
+        bypass_mode: always
+
+  - name: public only
+    target: repository
+    enforcement: active
+    conditions:
+      repository_name:
+        exclude: []
+        include:
+          - ~ALL
+    rules:
+      - type: repository_visibility
+        parameters:
+          public: true
+          internal: false
+          private: false
+    bypass_actors: []
