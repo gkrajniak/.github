@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
     permissions:
-      contents: write
+      contents: write # Needed to create the GitHub release
     steps:
       - name: Resolve release notes range
         id: range
