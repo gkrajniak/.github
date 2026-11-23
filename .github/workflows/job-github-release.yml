@@ -1,0 +1,134 @@
+name: GitHub Release
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag to create the release for (e.g. v1.2.0)
+        required: true
+        type: string
+      previousTag:
+        description: The tag the release notes start from; empty for the first release
+        required: false
+        type: string
+        default: ''
+      prerelease:
+        description: Mark the release as a pre-release
+        required: false
+        type: boolean
+        default: false
+      latest:
+        description: Mark the release as the latest release of the repository
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    permissions:
+      contents: write # Needed to create the GitHub release
+    steps:
+      - name: Resolve release notes range
+        id: range
+        env:
+          TAG: ${{ inputs.tag }}
+          PREVIOUS_TAG: ${{ inputs.previousTag }}
+        run: |
+          set -euo pipefail
+          TAG_PATTERN='^v?[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'
+          [[ "$TAG" =~ $TAG_PATTERN ]] || { echo "::error::Invalid tag '${TAG}'."; exit 1; }
+          [[ -z "$PREVIOUS_TAG" || "$PREVIOUS_TAG" =~ $TAG_PATTERN ]] || { echo "::error::Invalid previous tag '${PREVIOUS_TAG}'."; exit 1; }
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            echo "args=${PREVIOUS_TAG}..${TAG} --tag ${TAG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=--latest --tag ${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+
+      - name: Write git-cliff configuration
+        env:
+          TAG: ${{ inputs.tag }}
+          PREVIOUS_TAG: ${{ inputs.previousTag }}
+        run: |
+          set -euo pipefail
+          cat > "${RUNNER_TEMP}/cliff.toml" <<'EOF'
+          [changelog]
+          header = ""
+          body = """
+          {% if version %}\
+              ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+          {% else %}\
+              ## [unreleased]
+          {% endif %}\
+          {% for group, commits in commits | group_by(attribute="group") %}
+              ### {{ group | striptags | trim | upper_first }}
+
+              {% for commit in commits %}\
+                  - {% if commit.scope %}_({{ commit.scope }})_ {% endif %}\
+                      {% if commit.breaking %}[**breaking**] {% endif %}\
+                      {{ commit.message | split(pat="\n") | first | trim | upper_first }}
+              {% endfor %}\
+          {% endfor %}\n
+          """
+          trim = true
+          footer = ""
+
+          [git]
+          conventional_commits = true
+          filter_unconventional = false
+          split_commits = false
+          commit_parsers = [
+            { message = "^\\[no ci\\]", skip = true },
+            { message = "^Merge (pull request|branch)", skip = true },
+            { message = "^feat", group = "<!-- 0 -->Features" },
+            { message = "^fix", group = "<!-- 1 -->Bug Fixes" },
+            { message = "^perf", group = "<!-- 2 -->Performance" },
+            { message = "^revert", group = "<!-- 3 -->Reverts" },
+            { message = "^docs", skip = true },
+            { message = "^style", skip = true },
+            { message = "^refactor", skip = true },
+            { message = "^test", skip = true },
+            { message = "^chore", skip = true },
+            { message = "^ci", skip = true },
+            { message = "^build", skip = true },
+            { body = ".*security", group = "<!-- 4 -->Security" },
+            { message = ".*", group = "<!-- 5 -->Other" },
+          ]
+          protect_breaking_commits = true
+          filter_commits = false
+          topo_order = false
+          sort_commits = "newest"
+          EOF
+          TAGS="${TAG//./\\.}"
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            TAGS="${TAGS}|${PREVIOUS_TAG//./\\.}"
+          fi
+          echo "tag_pattern = '^(${TAGS})\$'" >> "${RUNNER_TEMP}/cliff.toml"
+
+      - name: Generate release notes
+        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
+        with:
+          config: ${{ runner.temp }}/cliff.toml
+          args: ${{ steps.range.outputs.args }} --strip all --output ${{ runner.temp }}/RELEASE_NOTES.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          LATEST: ${{ inputs.latest }}
+        run: |
+          set -euo pipefail
+          ARGS=(--verify-tag --title "${TAG#v}" --notes-file "${RUNNER_TEMP}/RELEASE_NOTES.md" "--latest=${LATEST}")
+          if [[ "$PRERELEASE" == "true" ]]; then
+            ARGS+=(--prerelease)
+          fi
+          gh release create "$TAG" "${ARGS[@]}"

@@ -36,6 +36,16 @@ on:
         description: 'The environment to use'
         required: true
         type: string
+      distTag:
+        description: 'The npm dist-tag to publish with; empty uses the npm default (latest)'
+        required: false
+        type: string
+        default: ''
+      commitVersion:
+        description: 'Commit the bumped version back to the branch and push it'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   publish:
@@ -45,6 +55,7 @@ jobs:
       contents: read # app token pushes commits; npm publish uses NODE_AUTH_TOKEN
     steps:
     - name: Setup Git
+      if: ${{ inputs.commitVersion }}
       run: |
         git config --global user.name 'Platform Mesh Technical User'
         git config --global user.email 'platform.mesh.tech@gmail.com'
@@ -71,28 +82,41 @@ jobs:
         echo "CLEANED_VERSION=$CLEANED_VERSION" >> $GITHUB_ENV
     - name: Publish from dist folder
       if: ${{ inputs.publishFromDist }}
+      env:
+        DIST_TAG: ${{ inputs.distTag }}
+        COMMIT_VERSION: ${{ inputs.commitVersion }}
       run: |
-        npm version ${{ env.CLEANED_VERSION }}
-        npm publish --provenance --access public
-        cd ..
-        npm version ${{ env.CLEANED_VERSION }} -m "[no ci] Release ${{ env.CLEANED_VERSION }}"
+        npm version "${CLEANED_VERSION}"
+        npm publish --provenance --access public ${DIST_TAG:+--tag "$DIST_TAG"}
+        if [[ "$COMMIT_VERSION" == "true" ]]; then
+          cd ..
+          npm version "${CLEANED_VERSION}" -m "[no ci] Release ${CLEANED_VERSION}"
+        fi
       working-directory:
         ${{ inputs.workingDirectoryDist }}
     - name: Publish to npmjs
       if: ${{ !inputs.publishFromDist }}
+      env:
+        DIST_TAG: ${{ inputs.distTag }}
+        COMMIT_VERSION: ${{ inputs.commitVersion }}
       run: |
-        npm version ${{ env.CLEANED_VERSION }} -m "[no ci] Release ${{ env.CLEANED_VERSION }}"
-        npm publish --provenance --access public
+        if [[ "$COMMIT_VERSION" == "true" ]]; then
+          npm version "${CLEANED_VERSION}" -m "[no ci] Release ${CLEANED_VERSION}"
+        else
+          npm version "${CLEANED_VERSION}" --no-git-tag-version --allow-same-version
+        fi
+        npm publish --provenance --access public ${DIST_TAG:+--tag "$DIST_TAG"}
       working-directory:
         ${{ inputs.workingDirectory }}
     - name: Commit and Tag
-      if: inputs.workingDirectory != './'
+      if: inputs.commitVersion && inputs.workingDirectory != './'
       run: |
         git add .
         git commit -m "[no ci] Release ${{ env.CLEANED_VERSION }}"
         git fetch
         git rebase
     - name: Push
+      if: ${{ inputs.commitVersion }}
       run: |
         git push origin
       working-directory: ${{ inputs.workingDirectory }}
