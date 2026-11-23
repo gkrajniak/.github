@@ -52,7 +52,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     environment: ${{ inputs.environment }}
     permissions:
-      contents: read # app token pushes commits; npm publish uses NODE_AUTH_TOKEN
+      contents: read # app token pushes commits
+      id-token: write # Needed for npm trusted publishing and provenance via OIDC
     steps:
     - name: Setup Git
       if: ${{ inputs.commitVersion }}
