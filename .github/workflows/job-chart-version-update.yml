@@ -21,6 +21,8 @@ on:
 jobs:
   trigger-helm-charts-version-update:
     runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read # app token carries its own auth
     steps:
       - name: Generate a token
         id: generate-token

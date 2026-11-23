@@ -41,6 +41,9 @@ on:
 jobs:
   release:
     runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write # ncipollo/release-action creates the GitHub release
+      packages: write # bsord/helm-push pushes the OCI chart to ghcr.io
     if: ${{ (github.head_ref || github.ref) == format('refs/heads/{0}',inputs.release_branch) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

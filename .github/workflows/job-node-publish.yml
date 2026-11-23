@@ -41,6 +41,8 @@ jobs:
   publish:
     runs-on: ubuntu-24.04-arm
     environment: ${{ inputs.environment }}
+    permissions:
+      contents: read # app token pushes commits; npm publish uses NODE_AUTH_TOKEN
     steps:
     - name: Setup Git
       run: |

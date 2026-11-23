@@ -23,6 +23,8 @@ jobs:
   # Creates a new semver to be used in the following workflow steps
   version:
     runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read # app token does the pushes and tags
     steps:
       - name: Create Github App Token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3

@@ -26,6 +26,9 @@ on:
 jobs:
   unittest:
     runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: read # pull the helm-unittest container from ghcr.io
     container:
       image: ghcr.io/platform-mesh/infra/helm-unittest:latest
       credentials:
@@ -39,6 +42,9 @@ jobs:
         run: helm unittest ${{ inputs.chartsFolder }}/${{ inputs.chartName }}
   lint:
     runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: read # chart-testing pulls dependency charts from ghcr.io
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

@@ -7,6 +7,9 @@ on:
 env:
   ORG: ${{ github.repository_owner }}
 
+permissions:
+  contents: read # app token and Zulip secrets carry their own auth
+
 jobs:
   report:
     runs-on: ubuntu-24.04-arm
