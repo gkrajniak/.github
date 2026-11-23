@@ -1,0 +1,25 @@
+name: Zizmor
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zizmor:
+    # Same repo, so call the reusable workflow by its local path.
+    uses: ./.github/workflows/job-zizmor.yml
+    with:
+      persona: 'auditor'
+    permissions:
+      security-events: write # Needed to write to the GitHub Security tab
+      contents: read # Needed to read repository contents
+      actions: read # Needed to read GitHub Actions workflows
