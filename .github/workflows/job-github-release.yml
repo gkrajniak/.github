@@ -22,8 +22,11 @@ on:
         type: boolean
         default: false
 
+permissions: {}
+
 jobs:
   release:
+    name: Create GitHub release
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
     permissions:

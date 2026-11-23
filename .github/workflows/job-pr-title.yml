@@ -2,8 +2,11 @@ name: PR Title
 on:
   workflow_call:
 
+permissions: {}
+
 jobs:
   lint-pr-title:
+    name: Check PR title
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 2
     permissions: {}
