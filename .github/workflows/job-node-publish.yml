@@ -87,7 +87,7 @@ jobs:
         DIST_TAG: ${{ inputs.distTag }}
         COMMIT_VERSION: ${{ inputs.commitVersion }}
       run: |
-        npm version "${CLEANED_VERSION}"
+        npm version "${CLEANED_VERSION}" --allow-same-version
         npm publish --provenance --access public ${DIST_TAG:+--tag "$DIST_TAG"}
         if [[ "$COMMIT_VERSION" == "true" ]]; then
           cd ..
