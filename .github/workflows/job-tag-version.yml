@@ -15,7 +15,7 @@ on:
         description: '"true" for a final release from main, "false" otherwise'
         value: ${{ jobs.version.outputs.latest }}
       distTag:
-        description: The npm dist-tag for the release (latest, next or release-<major>.<minor>)
+        description: The npm dist-tag for the release (latest, next, release-<major>.<minor> or release-<major>.<minor>-next)
         value: ${{ jobs.version.outputs.distTag }}
       branch:
         description: The branch the release is made from (main or release/...)
@@ -161,7 +161,11 @@ jobs:
 
           if [[ -n "$RC" ]]; then
             PRERELEASE="true"
-            DIST_TAG="next"
+            if [[ "$BRANCH" == "main" ]]; then
+              DIST_TAG="next"
+            else
+              DIST_TAG="release-${LINE}-next"
+            fi
             PREVIOUS_TAG="$(release_tags "$SHA" | lower_tags | highest_tag)"
           else
             PRERELEASE="false"
