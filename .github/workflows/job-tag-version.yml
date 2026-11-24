@@ -7,6 +7,11 @@ on:
         type: string
         required: false
         default: ''
+      versionFiles:
+        description: Space-separated package.json files whose version must equal the release version at the tagged commit (e.g. "package.json projects/lib/package.json"). Empty skips the check.
+        type: string
+        required: false
+        default: ''
     secrets:
       PM_PUBLISHER_PRIVATE_KEY:
         description: Private key of the publisher app that pushes the release tag. Required when version is set.
@@ -59,6 +64,7 @@ jobs:
           REF_TYPE: ${{ github.ref_type }}
           TAG: ${{ github.ref_name }}
           VERSION_INPUT: ${{ inputs.version }}
+          VERSION_FILES: ${{ inputs.versionFiles }}
         run: |
           set -euo pipefail
 
@@ -184,6 +190,25 @@ jobs:
             fi
             printf -v DETAILS '; %s' "${REASONS[@]}"
             fail "Tag ${TAG} cannot be released: ${DETAILS:2}."
+          fi
+
+          if [[ -n "$VERSION_FILES" ]]; then
+            read -r -a FILES <<< "$VERSION_FILES"
+            MISMATCHES=()
+            for FILE in "${FILES[@]}"; do
+              if ! git cat-file -e "${SHA}:${FILE}" 2>/dev/null; then
+                MISMATCHES+=("${FILE} does not exist")
+                continue
+              fi
+              FILE_VERSION="$(git show "${SHA}:${FILE}" | jq -r '.version // empty')"
+              if [[ "$FILE_VERSION" != "$VERSION" ]]; then
+                MISMATCHES+=("${FILE} has version ${FILE_VERSION:-<none>}")
+              fi
+            done
+            if (( ${#MISMATCHES[@]} > 0 )); then
+              printf -v DETAILS '; %s' "${MISMATCHES[@]}"
+              fail "Tag ${TAG} does not match the version in the source: ${DETAILS:2}. Set the version to ${VERSION} in a pull request before releasing."
+            fi
           fi
 
           if [[ -n "$RC" ]]; then
