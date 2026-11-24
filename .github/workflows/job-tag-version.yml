@@ -1,0 +1,282 @@
+name: Tag Version
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version to create the release tag for on the commit the workflow runs for (e.g. 1.2.0 or 1.2.0-rc.1), for a manually started release. Empty validates the pushed tag instead.
+        type: string
+        required: false
+        default: ''
+    secrets:
+      PM_PUBLISHER_PRIVATE_KEY:
+        description: Private key of the publisher app that pushes the release tag. Required when version is set.
+        required: false
+    outputs:
+      version:
+        description: The version taken from the pushed tag, without the v prefix (e.g. 1.2.0 or 1.2.0-rc.1)
+        value: ${{ jobs.version.outputs.version }}
+      tag:
+        description: The pushed tag (e.g. v1.2.0)
+        value: ${{ jobs.version.outputs.tag }}
+      prerelease:
+        description: '"true" for a release candidate, "false" otherwise'
+        value: ${{ jobs.version.outputs.prerelease }}
+      latest:
+        description: '"true" for a final release from main, "false" otherwise'
+        value: ${{ jobs.version.outputs.latest }}
+      distTag:
+        description: The npm dist-tag for the release (latest, next, release-<major>.<minor> or release-<major>.<minor>-next)
+        value: ${{ jobs.version.outputs.distTag }}
+      branch:
+        description: The branch the release is made from (main or release/...)
+        value: ${{ jobs.version.outputs.branch }}
+      previousTag:
+        description: The tag the release notes start from; empty for the first release
+        value: ${{ jobs.version.outputs.previousTag }}
+      sha:
+        description: The commit the release tag points to
+        value: ${{ jobs.version.outputs.sha }}
+
+permissions: {}
+
+jobs:
+  version:
+    name: Validate release tag
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Set up repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag and resolve version
+        id: resolve
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          TAG: ${{ github.ref_name }}
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          fail() {
+            echo "::error::$1"
+            exit 1
+          }
+
+          semver_gt() {
+            local a="$1" b="$2"
+            local a_core="${a%%-*}" b_core="${b%%-*}"
+            local a_rc="" b_rc=""
+            [[ "$a" == *-rc.* ]] && a_rc="${a##*-rc.}"
+            [[ "$b" == *-rc.* ]] && b_rc="${b##*-rc.}"
+            local -a av bv
+            IFS=. read -r -a av <<< "$a_core"
+            IFS=. read -r -a bv <<< "$b_core"
+            for i in 0 1 2; do
+              (( av[i] > bv[i] )) && return 0
+              (( av[i] < bv[i] )) && return 1
+            done
+            [[ -z "$a_rc" && -n "$b_rc" ]] && return 0
+            [[ -n "$a_rc" && -z "$b_rc" ]] && return 1
+            [[ -z "$a_rc" && -z "$b_rc" ]] && return 1
+            (( a_rc > b_rc ))
+          }
+
+          highest_tag() {
+            local highest="" t
+            while read -r t; do
+              [[ -z "$t" ]] && continue
+              if [[ -z "$highest" ]] || semver_gt "${t#v}" "${highest#v}"; then
+                highest="$t"
+              fi
+            done
+            echo "$highest"
+          }
+
+          lower_tags() {
+            local t
+            while read -r t; do
+              [[ -n "$t" ]] && semver_gt "$VERSION" "${t#v}" && echo "$t"
+            done
+            true
+          }
+
+          only_finals() {
+            grep -v -- '-rc\.' || true
+          }
+
+          only_line() {
+            grep -E "^v?${MAJOR}\.${MINOR}\." || true
+          }
+
+          VERSION_PATTERN='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.([1-9][0-9]*))?'
+
+          if [[ -n "$VERSION_INPUT" ]]; then
+            [[ "$REF_TYPE" == "branch" ]] || fail "A manual release must be started from a branch, got a ${REF_TYPE}."
+            TAG="v${VERSION_INPUT#v}"
+          else
+            [[ "$REF_TYPE" == "tag" ]] || fail "This workflow must be triggered by a tag push, got a ${REF_TYPE} push."
+          fi
+          [[ "$TAG" =~ ^v${VERSION_PATTERN}$ ]] || fail "Tag '${TAG}' is not a release tag. Use vX.Y.Z or vX.Y.Z-rc.N."
+
+          MAJOR="${BASH_REMATCH[1]}"
+          MINOR="${BASH_REMATCH[2]}"
+          RC="${BASH_REMATCH[5]}"
+          VERSION="${TAG#v}"
+
+          if [[ -n "$VERSION_INPUT" ]]; then
+            if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+              fail "Tag ${TAG} already exists."
+            fi
+            git tag "$TAG" HEAD
+          fi
+
+          LINE="${MAJOR}.${MINOR}"
+          SHA="$(git rev-list -n 1 "$TAG")"
+
+          release_tags() {
+            git tag --merged "$1" | { grep -Ex "v?${VERSION_PATTERN}" || true; } | { grep -Fvx "$TAG" || true; }
+          }
+
+          BRANCH=""
+          REASONS=()
+
+          if git merge-base --is-ancestor "$SHA" origin/main; then
+            HIGHEST="$(release_tags origin/main | highest_tag)"
+            if [[ -z "$HIGHEST" ]] || semver_gt "$VERSION" "${HIGHEST#v}"; then
+              BRANCH="main"
+            else
+              REASONS+=("on main the version must be higher than ${HIGHEST}")
+            fi
+          fi
+
+          if [[ -z "$BRANCH" ]]; then
+            while read -r REMOTE_BRANCH; do
+              [[ -z "$REMOTE_BRANCH" ]] && continue
+              NAME="${REMOTE_BRANCH#origin/}"
+              git merge-base --is-ancestor "$SHA" "$REMOTE_BRANCH" || continue
+              if [[ ! "$NAME" =~ ^release/(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))?$ ]]; then
+                REASONS+=("branch ${NAME} does not match release/<major>.<minor>[.<patch>]")
+                continue
+              fi
+              BRANCH_LINE="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+              if [[ "$BRANCH_LINE" != "$LINE" ]]; then
+                REASONS+=("branch ${NAME} only allows ${BRANCH_LINE}.x versions")
+                continue
+              fi
+              HIGHEST="$(release_tags "$REMOTE_BRANCH" | only_line | highest_tag)"
+              if [[ -n "$HIGHEST" ]] && ! semver_gt "$VERSION" "${HIGHEST#v}"; then
+                REASONS+=("on ${NAME} the version must be higher than ${HIGHEST}")
+                continue
+              fi
+              BRANCH="$NAME"
+              break
+            done < <(git for-each-ref --format='%(refname:short)' 'refs/remotes/origin/release/')
+          fi
+
+          if [[ -z "$BRANCH" ]]; then
+            if (( ${#REASONS[@]} == 0 )); then
+              REASONS+=("commit ${SHA} is not on main or on a release/* branch")
+            fi
+            printf -v DETAILS '; %s' "${REASONS[@]}"
+            fail "Tag ${TAG} cannot be released: ${DETAILS:2}."
+          fi
+
+          if [[ -n "$RC" ]]; then
+            PRERELEASE="true"
+            if [[ "$BRANCH" == "main" ]]; then
+              DIST_TAG="next"
+            else
+              DIST_TAG="release-${LINE}-next"
+            fi
+            PREVIOUS_TAG="$(release_tags "$SHA" | lower_tags | highest_tag)"
+          else
+            PRERELEASE="false"
+            if [[ "$BRANCH" == "main" ]]; then
+              DIST_TAG="latest"
+            else
+              DIST_TAG="release-${LINE}"
+            fi
+            PREVIOUS_TAG="$(release_tags "$SHA" | only_finals | lower_tags | highest_tag)"
+          fi
+
+          if [[ "$BRANCH" == "main" && "$PRERELEASE" == "false" ]]; then
+            LATEST="true"
+          else
+            LATEST="false"
+          fi
+
+          {
+            echo "version=${VERSION}"
+            echo "tag=${TAG}"
+            echo "prerelease=${PRERELEASE}"
+            echo "latest=${LATEST}"
+            echo "distTag=${DIST_TAG}"
+            echo "branch=${BRANCH}"
+            echo "previousTag=${PREVIOUS_TAG}"
+            echo "sha=${SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Release ${VERSION}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Branch | \`${BRANCH}\` |"
+            echo "| npm dist-tag | \`${DIST_TAG}\` |"
+            echo "| Pre-release | ${PRERELEASE} |"
+            echo "| Previous tag | \`${PREVIOUS_TAG:-none}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      prerelease: ${{ steps.resolve.outputs.prerelease }}
+      latest: ${{ steps.resolve.outputs.latest }}
+      distTag: ${{ steps.resolve.outputs.distTag }}
+      branch: ${{ steps.resolve.outputs.branch }}
+      previousTag: ${{ steps.resolve.outputs.previousTag }}
+      sha: ${{ steps.resolve.outputs.sha }}
+
+  push-tag:
+    name: Push release tag
+    needs: [version]
+    if: ${{ inputs.version != '' }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Create app token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: "1415820"
+          private-key: ${{ secrets.PM_PUBLISHER_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Set up repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          persist-credentials: false
+
+      - name: Push tag
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+          SHA: ${{ needs.version.outputs.sha }}
+          TOKEN: ${{ steps.app-token.outputs.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git tag "$TAG" "$SHA"
+          git push "https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git" "refs/tags/${TAG}"
+          {
+            echo "### Tag ${TAG} pushed"
+            echo ""
+            echo "The tag points to \`${SHA}\`. The release workflow now runs for the tag."
+          } >> "$GITHUB_STEP_SUMMARY"
